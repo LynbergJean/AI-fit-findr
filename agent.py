@@ -4,9 +4,7 @@ agent.py
 The FitFindr planning loop. Orchestrates the three tools in response to a
 natural language user query, passing state between them via a session dict.
 
-Complete tools.py and test each tool in isolation before implementing this file.
-
-Usage (once implemented):
+Usage:
     from agent import run_agent
     from utils.data_loader import get_example_wardrobe
 
@@ -18,31 +16,54 @@ Usage (once implemented):
     print(result["error"])   # None on success
 """
 
+import re
+
 from tools import search_listings, suggest_outfit, create_fit_card
 
 
 # ── session state ─────────────────────────────────────────────────────────────
 
 def _new_session(query: str, wardrobe: dict) -> dict:
-    """
-    Initialize and return a fresh session dict for one user interaction.
-
-    The session dict is the single source of truth for everything that happens
-    during a run — it stores the original query, parsed parameters, tool results,
-    and any error that caused early termination.
-
-    You may add fields to this dict as needed for your implementation.
-    """
+    """Initialize and return a fresh session dict for one user interaction."""
     return {
-        "query": query,              # original user query
-        "parsed": {},                # extracted description / size / max_price
-        "search_results": [],        # list of matching listing dicts
-        "selected_item": None,       # top result, passed into suggest_outfit
-        "wardrobe": wardrobe,        # user's wardrobe dict
-        "outfit_suggestion": None,   # string returned by suggest_outfit
-        "fit_card": None,            # string returned by create_fit_card
-        "error": None,               # set if the interaction ended early
+        "query": query,
+        "parsed": {},
+        "search_results": [],
+        "selected_item": None,
+        "wardrobe": wardrobe,
+        "outfit_suggestion": None,
+        "fit_card": None,
+        "error": None,
     }
+
+
+# ── query parsing ─────────────────────────────────────────────────────────────
+
+def _parse_query(query: str) -> dict:
+    """
+    Extract description, size, and max_price from a natural language query
+    using simple regex patterns.
+    """
+    parsed = {"description": query, "size": None, "max_price": None}
+
+    # Extract price (e.g., "under $30", "below $50", "max $25")
+    price_match = re.search(r'(?:under|below|max|<)\s*\$?(\d+(?:\.\d+)?)', query, re.IGNORECASE)
+    if price_match:
+        parsed["max_price"] = float(price_match.group(1))
+
+    # Extract size (e.g., "size M", "size 8", "in XL")
+    size_match = re.search(r'(?:size\s+|in\s+)(XS|S|M|L|XL|XXL|XXS|\d+(?:\.\d+)?)', query, re.IGNORECASE)
+    if size_match:
+        parsed["size"] = size_match.group(1).upper()
+
+    # Clean up description: remove price/size phrases
+    desc = query
+    desc = re.sub(r'(?:under|below|max|<)\s*\$?\d+(?:\.\d+)?', '', desc, flags=re.IGNORECASE)
+    desc = re.sub(r'(?:size\s+|in\s+)(XS|S|M|L|XL|XXL|XXS|\d+(?:\.\d+)?)', '', desc, flags=re.IGNORECASE)
+    desc = re.sub(r'[,\s]+', ' ', desc).strip()
+    parsed["description"] = desc
+
+    return parsed
 
 
 # ── planning loop ─────────────────────────────────────────────────────────────
@@ -54,47 +75,54 @@ def run_agent(query: str, wardrobe: dict) -> dict:
 
     Args:
         query:    Natural language user request
-                  (e.g., "vintage graphic tee under $30, size M")
-        wardrobe: User's wardrobe dict — use get_example_wardrobe() or
-                  get_empty_wardrobe() from utils/data_loader.py
+        wardrobe: User's wardrobe dict
 
     Returns:
-        The session dict after the interaction completes. Check session["error"]
-        first — if it is not None, the interaction ended early and the other
-        output fields (outfit_suggestion, fit_card) will be None.
-
-    TODO — implement this function using the planning loop you designed in planning.md:
-
-        Step 1: Initialize the session with _new_session().
-
-        Step 2: Parse the user's query to extract a description, size, and
-                max_price. You can use regex, string splitting, or ask the LLM
-                to parse it — document your choice in planning.md.
-                Store the result in session["parsed"].
-
-        Step 3: Call search_listings() with the parsed parameters.
-                Store results in session["search_results"].
-                If no results: set session["error"] to a helpful message and
-                return the session early. Do NOT proceed to suggest_outfit
-                with empty input.
-
-        Step 4: Select the item to use (e.g., the top result).
-                Store it in session["selected_item"].
-
-        Step 5: Call suggest_outfit() with the selected item and wardrobe.
-                Store the result in session["outfit_suggestion"].
-
-        Step 6: Call create_fit_card() with the outfit suggestion and selected item.
-                Store the result in session["fit_card"].
-
-        Step 7: Return the session.
-
-    Before writing code, complete the Planning Loop and State Management sections
-    of planning.md — your implementation should match what you described there.
+        The session dict after the interaction completes.
     """
-    # TODO: implement the planning loop
     session = _new_session(query, wardrobe)
-    session["error"] = "Planning loop not yet implemented."
+
+    # Step 1: Parse query
+    session["parsed"] = _parse_query(query)
+
+    # Step 2: Search listings
+    session["search_results"] = search_listings(
+        description=session["parsed"]["description"],
+        size=session["parsed"]["size"],
+        max_price=session["parsed"]["max_price"],
+    )
+
+    # Step 3: Check for results
+    if not session["search_results"]:
+        session["error"] = (
+            "No listings matched your search. Try broadening your criteria "
+            "(remove size or increase budget)."
+        )
+        return session
+
+    # Step 4: Select top result
+    session["selected_item"] = session["search_results"][0]
+
+    # Step 5: Suggest outfit
+    try:
+        session["outfit_suggestion"] = suggest_outfit(
+            new_item=session["selected_item"],
+            wardrobe=session["wardrobe"],
+        )
+    except Exception as e:
+        session["error"] = f"Outfit suggestion failed: {e}"
+        return session
+
+    # Step 6: Create fit card
+    try:
+        session["fit_card"] = create_fit_card(
+            outfit=session["outfit_suggestion"],
+            new_item=session["selected_item"],
+        )
+    except Exception as e:
+        session["error"] = f"Fit card generation failed: {e}"
+        return session
+
     return session
 
 
