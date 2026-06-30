@@ -1,17 +1,21 @@
-# FitFindr — Starter Kit
+# FitFindr
 
-This starter kit contains everything you need to begin Project 2.
+A secondhand fashion shopping assistant powered by semantic search and LLM-based styling. Find thrifted clothing, get outfit suggestions, and generate shareable fit cards — all through a conversational interface.
 
-## What's Included
+## Project Structure
 
 ```
-ai201-project2-fitfindr-starter/
+Fit-Findr/
 ├── data/
 │   ├── listings.json          # 40 mock secondhand listings
 │   └── wardrobe_schema.json   # Wardrobe format + example wardrobe
 ├── utils/
-│   └── data_loader.py         # Helper functions for loading the data
-├── planning.md                # Your planning template — fill this out first
+│   └── data_loader.py         # Helper functions for loading data
+├── agent.py                   # ReAct-style conversational agent
+├── app.py                     # Gradio chat UI
+├── embeddings.py              # Pinecone vector index + semantic search
+├── tools.py                   # Agent tools (search, outfit, fit card)
+├── planning.md                # Architecture & design decisions
 └── requirements.txt           # Python dependencies
 ```
 
@@ -21,41 +25,41 @@ ai201-project2-fitfindr-starter/
 pip install -r requirements.txt
 ```
 
-Set your Groq API key in a `.env` file (get a free key at [console.groq.com](https://console.groq.com)):
+Create a `.env` file with your API keys:
 ```
-GROQ_API_KEY=your_key_here
+GEMINI_API_KEY=your_key_here
+PINECONE_API_KEY=your_key_here
 ```
 
-## The Mock Listings Dataset
+## Usage
+
+Launch the Gradio chat interface:
+```bash
+python app.py
+```
+
+Or run the agent in CLI mode:
+```bash
+python agent.py
+```
+
+## The Listings Dataset
 
 `data/listings.json` contains 40 mock secondhand listings across categories (tops, bottoms, outerwear, shoes, accessories) and styles (vintage, y2k, grunge, cottagecore, streetwear, and more).
 
 Each listing has: `id`, `title`, `description`, `category`, `style_tags`, `size`, `condition`, `price`, `colors`, `brand`, and `platform`.
 
-Load it with:
-```python
-from utils.data_loader import load_listings
-listings = load_listings()
-```
+## Wardrobe
 
-## The Wardrobe Schema
-
-`data/wardrobe_schema.json` defines the format your agent uses to represent a user's existing wardrobe. It includes:
+`data/wardrobe_schema.json` defines how a user's existing wardrobe is represented. It includes:
 
 - `schema`: field definitions for a wardrobe item
-- `example_wardrobe`: a sample wardrobe with 10 items you can use for testing
+- `example_wardrobe`: a sample wardrobe with 10 items
 - `empty_wardrobe`: a starting template for a new user
 
-Load an example wardrobe with:
-```python
-from utils.data_loader import get_example_wardrobe
-wardrobe = get_example_wardrobe()
-```
+## How It Works
 
-## Where to Start
-
-1. **Read `planning.md` and fill it out before writing any code.**
-2. Verify the data loads correctly by running `python utils/data_loader.py`.
-3. Build and test each tool individually before connecting them through your planning loop.
-
-Your implementation files go in this same directory. There's no required file structure for your agent code — organize it however makes sense for your design.
+1. User describes what they're looking for in natural language
+2. The agent uses semantic search (sentence-transformers + Pinecone) to find matching listings
+3. On request, it pairs finds with the user's wardrobe for outfit suggestions (via Gemini)
+4. It can generate shareable social media captions for the styled outfit

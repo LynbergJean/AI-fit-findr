@@ -1,7 +1,7 @@
 """
 app.py
 
-Gradio interface for FitFindr.
+Gradio chat interface for FitFindr with multi-turn conversation.
 
 Run with:
     python app.py
@@ -10,119 +10,106 @@ Run with:
 import gradio as gr
 
 from agent import run_agent
+from embeddings import build_index
 from utils.data_loader import get_example_wardrobe, get_empty_wardrobe
 
 
-# ── query handler ─────────────────────────────────────────────────────────────
+def initialize():
+    """Build Pinecone index on startup (idempotent)."""
+    try:
+        count = build_index()
+        print(f"✓ Pinecone index ready ({count} listings)")
+    except Exception as e:
+        print(f"⚠ Index build failed: {e}. Search may not work.")
 
-def handle_query(user_query: str, wardrobe_choice: str) -> tuple[str, str, str]:
-    """
-    Called by Gradio when the user submits a query.
 
-    Returns:
-        A tuple of three strings:
-            (listing_text, outfit_suggestion, fit_card)
-    """
-    if not user_query or not user_query.strip():
-        return "Please enter a search query.", "", ""
+def respond(user_message: str, chat_history: list, wardrobe_choice: str, agent_state: dict):
+    """Handle a user message and return the updated chat."""
+    if not user_message.strip():
+        return "", chat_history, agent_state
 
-    wardrobe = (
-        get_example_wardrobe() if wardrobe_choice == "Example wardrobe"
-        else get_empty_wardrobe()
+    # Set wardrobe in state
+    if "wardrobe" not in agent_state:
+        agent_state["wardrobe"] = (
+            get_example_wardrobe() if wardrobe_choice == "Example wardrobe"
+            else get_empty_wardrobe()
+        )
+
+    # Get conversation history from state
+    conversation_history = agent_state.get("conversation_history", [])
+
+    # Run agent
+    response, conversation_history, agent_state = run_agent(
+        user_message=user_message,
+        conversation_history=conversation_history,
+        state=agent_state,
     )
 
-    session = run_agent(query=user_query.strip(), wardrobe=wardrobe)
+    # Save updated history back to state
+    agent_state["conversation_history"] = conversation_history
 
-    if session["error"]:
-        return session["error"], "", ""
+    # Update Gradio chat display
+    chat_history.append((user_message, response))
 
-    item = session["selected_item"]
-    listing_text = (
-        f"{item['title']}\n"
-        f"Price: ${item['price']:.2f}\n"
-        f"Size: {item['size']}\n"
-        f"Condition: {item['condition']}\n"
-        f"Platform: {item['platform']}\n"
-        f"Colors: {', '.join(item['colors'])}\n"
-        f"Style: {', '.join(item['style_tags'])}\n"
-        f"Brand: {item['brand'] or 'Unbranded'}\n\n"
-        f"{item['description']}"
-    )
+    return "", chat_history, agent_state
 
-    return listing_text, session["outfit_suggestion"], session["fit_card"]
-
-
-# ── interface ─────────────────────────────────────────────────────────────────
-
-EXAMPLE_QUERIES = [
-    "vintage graphic tee under $30",
-    "90s track jacket in size M",
-    "flowy midi skirt under $40",
-    "black combat boots size 8",
-    "designer ballgown size XXS under $5",   # deliberate no-results test
-]
 
 def build_interface():
-    with gr.Blocks(title="FitFindr") as demo:
+    with gr.Blocks(title="FitFindr", theme=gr.themes.Soft()) as demo:
         gr.Markdown("""
 # FitFindr 🛍️
-Find secondhand pieces and get outfit ideas based on your wardrobe.
-Describe what you're looking for — include size and price if you want to filter.
+Find secondhand pieces and get outfit ideas. Ask follow-up questions to refine results.
+
+**Try:** "Find me a cozy fall layer under $40" → "Can you style that with my wardrobe?" → "Give me a caption for it"
         """)
 
+        agent_state = gr.State({})
+
         with gr.Row():
-            query_input = gr.Textbox(
-                label="What are you looking for?",
-                placeholder="e.g. vintage graphic tee under $30, size M",
-                lines=2,
-                scale=3,
-            )
             wardrobe_choice = gr.Radio(
                 choices=["Example wardrobe", "Empty wardrobe (new user)"],
                 value="Example wardrobe",
                 label="Wardrobe",
-                scale=1,
             )
 
-        submit_btn = gr.Button("Find it", variant="primary")
+        chatbot = gr.Chatbot(label="FitFindr", height=500)
 
         with gr.Row():
-            listing_output = gr.Textbox(
-                label="🛍️ Top listing found",
-                lines=8,
-                interactive=False,
+            msg = gr.Textbox(
+                label="Message",
+                placeholder="e.g. Find me a vintage graphic tee under $30...",
+                scale=4,
             )
-            outfit_output = gr.Textbox(
-                label="👗 Outfit idea",
-                lines=8,
-                interactive=False,
-            )
-            fitcard_output = gr.Textbox(
-                label="✨ Your fit card",
-                lines=8,
-                interactive=False,
-            )
+            send_btn = gr.Button("Send", variant="primary", scale=1)
 
         gr.Examples(
-            examples=[[q, "Example wardrobe"] for q in EXAMPLE_QUERIES],
-            inputs=[query_input, wardrobe_choice],
-            label="Try these queries",
+            examples=[
+                "Find me a cozy fall layer under $40",
+                "Looking for vintage graphic tees",
+                "I need black combat boots",
+                "Something cottagecore for summer",
+                "90s streetwear vibes, size M",
+            ],
+            inputs=msg,
+            label="Try these",
         )
 
-        submit_btn.click(
-            fn=handle_query,
-            inputs=[query_input, wardrobe_choice],
-            outputs=[listing_output, outfit_output, fitcard_output],
+        # Event handlers
+        send_btn.click(
+            fn=respond,
+            inputs=[msg, chatbot, wardrobe_choice, agent_state],
+            outputs=[msg, chatbot, agent_state],
         )
-        query_input.submit(
-            fn=handle_query,
-            inputs=[query_input, wardrobe_choice],
-            outputs=[listing_output, outfit_output, fitcard_output],
+        msg.submit(
+            fn=respond,
+            inputs=[msg, chatbot, wardrobe_choice, agent_state],
+            outputs=[msg, chatbot, agent_state],
         )
 
     return demo
 
 
 if __name__ == "__main__":
+    initialize()
     demo = build_interface()
     demo.launch()
