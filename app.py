@@ -1,7 +1,7 @@
 """
 app.py
 
-Gradio chat interface for FitFindr with multi-turn conversation.
+Gradio chat interface 
 
 Run with:
     python app.py
@@ -15,12 +15,12 @@ from utils.data_loader import get_example_wardrobe, get_empty_wardrobe
 
 
 def initialize():
-    """Build Pinecone index on startup (idempotent)."""
+    """Build Pinecone index on startup """
     try:
         count = build_index()
         print(f"✓ Pinecone index ready ({count} listings)")
     except Exception as e:
-        print(f"⚠ Index build failed: {e}. Search may not work.")
+        print(f"Index build failed: {e}. Search may not work.")
 
 
 def respond(user_message: str, chat_history: list, wardrobe_choice: str, agent_state: dict):
@@ -49,7 +49,8 @@ def respond(user_message: str, chat_history: list, wardrobe_choice: str, agent_s
     agent_state["conversation_history"] = conversation_history
 
     # Update Gradio chat display
-    chat_history.append((user_message, response))
+    chat_history.append({"role": "user", "content": user_message})
+    chat_history.append({"role": "assistant", "content": response})
 
     return "", chat_history, agent_state
 

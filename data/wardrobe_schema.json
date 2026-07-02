@@ -1,5 +1,5 @@
 {
-  "_description": "This file defines the wardrobe schema your agent will use. The 'example_wardrobe' shows a sample user's closet. Your suggest_outfit tool should accept a wardrobe in this format.",
+  "_description": "This file defines the wardrobe schema the agent will use. The 'example_wardrobe' shows a sample user's closet. the suggest_outfit tool should accept a wardrobe in this format.",
 
   "schema": {
     "items": [

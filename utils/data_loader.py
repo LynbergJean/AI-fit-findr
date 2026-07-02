@@ -72,7 +72,7 @@ def get_empty_wardrobe() -> dict:
     return schema["empty_wardrobe"]
 
 
-# --- Quick sanity check ---
+#checkign
 if __name__ == "__main__":
     listings = load_listings()
     print(f"Loaded {len(listings)} listings.")

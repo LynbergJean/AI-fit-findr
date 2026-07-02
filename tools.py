@@ -26,7 +26,7 @@ def _get_model(temperature=0.7):
         raise ValueError("GEMINI_API_KEY not set. Add it to .env.")
     genai.configure(api_key=api_key)
     return genai.GenerativeModel(
-        "gemini-2.0-flash",
+        "gemini-2.5-flash",
         generation_config=genai.GenerationConfig(temperature=temperature, max_output_tokens=300),
     )
 
@@ -93,16 +93,16 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
     model = _get_model(temperature=0.9)
 
     prompt = (
-        f"Write a 2-4 sentence Instagram/TikTok caption for this thrifted outfit.\n\n"
+        f"Write a 1 sentence Instagram/TikTok caption for this thrifted outfit.\n\n"
         f"Item: {new_item['title']}\n"
         f"Price: ${new_item['price']}\n"
         f"Platform: {new_item['platform']}\n"
         f"Outfit idea: {outfit}\n\n"
         "Guidelines:\n"
-        "- Sound casual and authentic, like a real OOTD post\n"
+        "- Sound casual and authentic and Gen-Z ish , like a real OOTD post\n"
         "- Mention the item name, price, and platform naturally (once each)\n"
         "- Capture the outfit vibe in specific terms\n"
-        "- Do NOT use hashtags"
+        "- use hashtags"
     )
 
     response = model.generate_content(prompt)

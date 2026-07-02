@@ -3,7 +3,7 @@ agent.py
 
 ReAct-style agent with conversation memory for FitFindr.
 Uses Google Gemini for reasoning. The LLM decides which tool to call
-(or none) based on conversation context.
+or no tools at all based on the context of the convo.
 """
 
 import json
@@ -64,7 +64,7 @@ def _get_model():
         raise ValueError("GEMINI_API_KEY not set.")
     genai.configure(api_key=api_key)
     return genai.GenerativeModel(
-        "gemini-2.0-flash",
+        "gemini-2.5-flash",
         generation_config=genai.GenerationConfig(temperature=0.3, max_output_tokens=500),
     )
 
@@ -195,7 +195,7 @@ def run_agent(user_message: str, conversation_history: list[dict], state: dict) 
     return fallback, conversation_history, state
 
 
-# ── CLI test ──────────────────────────────────────────────────────────────────
+# test
 
 if __name__ == "__main__":
     history = []
